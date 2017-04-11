@@ -11,8 +11,8 @@ MSB                                           LSB
 [B6|B5|B4|B3|B2|E7|E6|E5|E4|E3|E2|A7|A6|A5|A4|A3]
 
 <Control lines>
-GPIOB_15 = A0 (0 for address write, 1 for data access)
-GPIOB_14 = RD (Active high)
+GPIOB_14 = A0 (0 for address write, 1 for data access)
+GPIOB_13 = RD (Active high)
 GPIOA_0 = CS (Active high)
 GPIOA_1 = WR (Active high)
 ************************************************************************/
