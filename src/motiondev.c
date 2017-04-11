@@ -1,41 +1,75 @@
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+
+#include "motiondev.h"
 #include "motiondev_lld.h"
-//vermagic=2.6.35.4 preempt mod_unload ARMv5
 
-/* IO Control */
-static int motion_ioctl(void)
+/* Private function prototypes */
+static int motiondev_open(struct inode *inode, struct file *file);
+static int motiondev_close(struct inode *inode, struct file *file);
+static int motiondev_ioctl(struct inode *inode, struct file *file,	unsigned int ioctl_num, unsigned long ioctl_param);
+
+/* Control structure */
+static struct file_operations file_ops = {
+	.ioctl = motiondev_ioctl,
+	.open = motiondev_open,
+	.release = motiondev_close
+};
+
+/* Open file */
+static int motiondev_open(struct inode *inode, struct file *file)
 {
 
 }
 
-/* Open device */
-static int motion_open(void)
+/* Close file */
+static int motiondev_close(struct inode *inode, struct file *file)
 {
-	return 0;
+
 }
 
-/* Close device */
-static int motion_close(void)
+/* IO control access */
+static int motiondev_ioctl(struct inode *inode, struct file *file,	unsigned int ioctl_num, unsigned long ioctl_param)
 {
-	return 0;
+
 }
 
 /* Entry point */
-static void  motion_init(void)
+static void motiondev_init(void)
 {
-	//Create a char device and do a init
+	int res;
+	
+	/* Register the device */
+	res = register_chrdev(MAJOR_NUM, DEVICE_NAME, &file_ops);
+	
+	if (res < 0) {
+		printk(KERN_ALERT "Failed with error code %d", res);
+		return res;
+	}
+	
+	/* Ok */
+	return 0;
 }
 
 /* Exit point */
-static void  motion_exit(void)
+static void motiondev_exit(void)
 {
-	//Perform a cleanup
+	int res;
+
+	/* Unregister the device */
+	res = unregister_chrdev(MAJOR_NUM, DEVICE_NAME);
+
+	if (res < 0) {
+		printk(KERN_ALERT "Failed with error code %d", res);
+	}
 }
 
 /* Entry and exit functions */
-//module_init(motion_init);
-//module_exit(motion_exit);
+module_init(motiondev_init);
+module_exit(motiondev_exit);
 
 /* Module info */
-//MODULE_AUTHOR("Pavel Ionut - Catalin");
-//MODULE_DESCRIPTION("DDCSV1.1 FPGA Motion Control Driver");
-//MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Pavel Ionut - Catalin");
+MODULE_DESCRIPTION("DDCSV1.1 FPGA Motion Control Driver");
+MODULE_LICENSE("GPL");
