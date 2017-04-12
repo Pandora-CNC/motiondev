@@ -84,7 +84,7 @@ static int __init motiondev_init(void)
 	motiondev_lld_init();
 	
 	/* Ok */
-	printk(KERN_INFO DEVICE_FILE_NAME " initialization finished\n");
+	printk(KERN_INFO "%s initialization finished\n", DEVICE_FILE_NAME);
 	return 0;
 }
 
