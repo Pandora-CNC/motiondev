@@ -43,9 +43,9 @@ GPIOA_1 = WR (Active high)
 #define ACC_DATA	(1u)
 
 /* Data access macro */
-#define OUT_DATA(dat) do{GPIOA_DOUT = (GPIOA_DOUT & ~DATA_MASK_GPIOA) | ((dat & 0x1Fu) << 3u)); \
-						GPIOE_DOUT = (GPIOE_DOUT & ~DATA_MASK_GPIOE) | ((dat & 0x7E0u) >> 3u)); \
-						GPIOB_DOUT = (GPIOB_DOUT & ~DATA_MASK_GPIOB) | ((dat & 0xF800u) >> 9u));} while(0u)
+#define OUT_DATA(dat) do{GPIOA_DOUT = (GPIOA_DOUT & ~DATA_MASK_GPIOA) | ((dat & 0x1Fu) << 3u); \
+						GPIOE_DOUT = (GPIOE_DOUT & ~DATA_MASK_GPIOE) | ((dat & 0x7E0u) >> 3u); \
+						GPIOB_DOUT = (GPIOB_DOUT & ~DATA_MASK_GPIOB) | ((dat & 0xF800u) >> 9u);} while(0u)
 
 #define IN_DATA() (((GPIOA_PIN & DATA_MASK_GPIOA) >> 3u) \
 					| ((GPIOE_PIN & DATA_MASK_GPIOE) << 3u) \
@@ -85,7 +85,7 @@ void motiondev_lld_init(void)
 	GPIOB_OMD |= (DATA_MASK_GPIOB | (1u << A0) |  (1u << RD));
 	GPIOE_OMD |= DATA_MASK_GPIOE;
 	
-	/* Don't know exactly what for */
+	/* Don't know exactly what for TODO maybe SPI0??*/
 	GPIOD_PUEN |= (1u << 15u); /* Pull up */
 	GPIOD_OMD &= ~(1u << 15u); /* Input */
 	GPIOD_OMD |= (1u << 14u) | (1u << 13u) | (1u << 12u) | (1u << 2u) | (1u << 1u) | (1u << 0u);

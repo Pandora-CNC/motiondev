@@ -1,8 +1,15 @@
-KERNEL_DIR=F:\Projects\ddcsv_custom\motiondev\kernel
+export ARCH:=arm
+export CROSS_COMPILE:=arm-none-linux-gnueabi-
 
-KERNEL_INC=$(KERNEL_DIR)/include THIS_DIR=F:\Projects\ddcsv_custom\motiondev\
+KDIR := /mcuzone/work/w55fa93bsp-2.6.35/linux-2.6.35.4
 
-obj-m += src/motiondev.o
+PWD := $(shell pwd)
+
+obj-m += motiondev.o
+motiondev-objs := /src/motiondev.o /src/motiondev_lld.o
 
 default:
-	make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -C $(KERNEL_DIR) SUBDIRS=$(THIS_DIR) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
