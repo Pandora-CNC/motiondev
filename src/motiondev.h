@@ -3,4 +3,6 @@
 
 #define DEVICE_FILE_NAME "motiondev"
 
+#define DEBUG_ENABLED 0
+
 #endif
