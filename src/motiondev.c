@@ -21,8 +21,8 @@
 #define FIRST_FLAG 3
 
 static void debug_write(unsigned short addr, unsigned short data);
-static unsigned short debug_read(unsigned short addr);
-static void trace_write(unsigned short addr, unsigned short data);
+static unsigned short debug_read(unsigned short addr, unsigned short data);
+static void trace_write(unsigned short addr, unsigned short data, unsigned char flags);
 static void trace_init(void);
 
 struct mdev_trace {
@@ -61,8 +61,6 @@ static void trace_init(void)
 	/* Just assure that the index is 0 */
 	/* Don't know exactly how the driver initializes statics */
 	motiondev_debug.index = 0;
-	motiondev_debug.trace[0].flags |= (1u << FIRST_FLAG) | (1u << LAST_FLAG);
-	
 }
 
 /* Trace write */
