@@ -10,12 +10,127 @@
 
 /* Febug framework */ 
 #if (DEBUG_ENABLED != 0)
-#define NUM_OF_REGS 256
+
+/* Max write/read index (+ 1) */
+#define NUM_OF_REGS 167
+
+/* Flags */
+#define WR_FLAG 0
+#define RD_FLAG 1
+#define NEXT_FLAG 2
+#define FIRST_FLAG 3
+
+static void debug_write(unsigned short addr, unsigned short data);
+static unsigned short debug_read(unsigned short addr);
+static void trace_write(unsigned short addr, unsigned short data);
+static void trace_init(void);
+
+struct mdev_trace {
+	unsigned short data;
+	unsigned char addr;
+	unsigned char flags;
+};
+
+struct mdev_shadow {
+	unsigned short write;
+	unsigned short read;
+};
+
 static struct mdev_debug {
-	unsigned short write[NUM_OF_REGS];
-	unsigned short read[NUM_OF_REGS];
-	char bypass_read;
+	/* Trace data */
+	struct mdev_trace trace[DEBUG_TRACE_LENGTH];
+	
+	/* Shadow registers */
+	struct mdev_shadow shadow[NUM_OF_REGS];
+	
+	/* Current trace index */
+	unsigned long index;
+	
+	/* Trace control */
+	volatile char cont_sample;
+	
+	/* Enable the read bypass from the debugger */
+	volatile char bypass_read;
 } motiondev_debug;
+
+/* Private debug functions */
+
+/* Init trace */
+static void trace_init(void)
+{
+	/* Just assure that the index is 0 */
+	/* Don't know exactly how the driver initializes statics */
+	motiondev_debug.index = 0;
+	motiondev_debug.trace[0].flags |= (1u << FIRST_FLAG) | (1u << LAST_FLAG);
+	
+}
+
+/* Trace write */
+static void trace_write(unsigned short addr, unsigned short data, unsigned char flags)
+{
+	struct mdev_trace *loc;
+	
+	/* TODO add single shot mode ?? */
+	/* Only on continous sample or not first sample*/
+	if(motiondev_debug.cont_sample) {
+		/* Get current index */
+		loc = &motiondev_debug.trace[motiondev_debug.index];
+		
+		/* Clear the next flag */
+		loc->flags &= ~(1u << NEXT_FLAG);
+		
+		/* Write a sample */
+		loc->data = data;
+		loc->addr = (unsigned char)(addr & 0xFFu);
+		loc->flags |= (1u << flags);
+
+		/* Loop the counter */
+		if(motiondev_debug.index < DEBUG_TRACE_LENGTH) {
+			motiondev_debug.index++;
+		} else {
+			motiondev_debug.index = 0u;
+		}
+		
+		/* Get next index */
+		loc = &motiondev_debug.trace[motiondev_debug.index];
+		
+		/* Write the next flag */
+		loc->flags |= (1u << NEXT_FLAG);
+	}
+}
+
+/* Write hook */
+static void debug_write(unsigned short addr, unsigned short data)
+{
+	/* Make a write copy */
+	if(addr < NUM_OF_REGS) {
+		motiondev_debug.shadow[addr].write = data;
+	}
+	
+	/* Write the trace */
+	trace_write(addr, data, WR_FLAG);
+}
+
+/* Read hook */
+static unsigned short debug_read(unsigned short addr, unsigned short data)
+{
+	unsigned short val = data;
+	
+	/* Overwrite if flag requires it */
+	if(addr < NUM_OF_REGS) {
+		if(motiondev_debug.bypass_read != 0) {
+			val = motiondev_debug.shadow[addr].read;
+		} else {
+			motiondev_debug.shadow[addr].read = val;
+		}
+	}
+	
+	/* Write the trace */
+	trace_write(addr, val, RD_FLAG);
+	
+	return val;
+}
+
 #endif
 
 /* Private data */
@@ -53,13 +168,13 @@ static int motiondev_release(struct inode *inode, struct file *file)
 /* IO control access */
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
-	int ret, ind;
+	int ret;
 	unsigned short val, addr;
 	
 	/* Temp buffer */
 	unsigned long buf[33];
 	
-	/* Requests TODO maybe add some error detection ??*/
+	/* Requests */
 	switch(ioctl_num) {
 		/* Write data */
 		case 0x4620u:
@@ -68,9 +183,7 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 				addr = (unsigned short)(buf[0] & 0xFFFFu);
 				val = (unsigned short)(buf[1] & 0xFFFFu);
 #if (DEBUG_ENABLED != 0)
-				if(buf[0] < NUM_OF_REGS) {
-					motiondev_debug.write[addr] = val;
-				}	
+				debug_write(addr, val);
 #endif
 				motiondev_lld_write_data(addr, val);	
 			}
@@ -81,14 +194,9 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 			ret = copy_from_user(buf, (unsigned long *)ioctl_param, 8);
 			if(ret == 0) {
 				addr = (unsigned short)(buf[0] & 0xFFFFu);
-#if (DEBUG_ENABLED != 0)
-				if(motiondev_debug.bypass_read != 0) {
-					val = motiondev_debug.read[addr];
-				} else {
-					val = motiondev_lld_read_data(addr);
-				}
-#else
 				val = motiondev_lld_read_data(addr);
+#if (DEBUG_ENABLED != 0)
+				val = debug_read(addr, val);
 #endif
 				buf[1] = (unsigned long)val;
 				ret = copy_to_user((unsigned long *)ioctl_param, buf, 8);
@@ -104,6 +212,7 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 			/* Write 48 with 0*/
 			
 			/* Read 18 and if not 1 print error ?? */
+			ret = -1;
 			break;
 			
 		default:
@@ -150,6 +259,11 @@ static int __init motiondev_init(void)
 	
 	/* Init the hardware */
 	motiondev_lld_init();
+	
+#if (DEBUG_ENABLED != 0)
+	/* Just to be sure */
+	trace_init();
+#endif	
 	
 	/* Ok */
 	printk(KERN_INFO "%s initialization finished\n", DEVICE_FILE_NAME);
