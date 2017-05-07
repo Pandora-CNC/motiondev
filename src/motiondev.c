@@ -14,43 +14,34 @@
 /* Max write/read index (+ 1) */
 #define NUM_OF_REGS 167
 
-/* Flags */
-#define WR_FLAG 0
-#define RD_FLAG 1
-#define NEXT_FLAG 2
-#define FIRST_FLAG 3
+/* Trace flags */
+#define WR_FLAG	0x1
+#define RD_FLAG 0x2
 
 static void debug_write(unsigned short addr, unsigned short data);
 static unsigned short debug_read(unsigned short addr, unsigned short data);
 static void trace_write(unsigned short addr, unsigned short data, unsigned char flags);
 static void trace_init(void);
 
-struct mdev_trace {
-	unsigned short data;
-	unsigned char addr;
-	unsigned char flags;
-};
-
-struct mdev_shadow {
-	unsigned short write;
-	unsigned short read;
-};
-
-static struct mdev_debug {
-	/* Trace data */
-	struct mdev_trace trace[DEBUG_TRACE_LENGTH];
+/* Trace structure */
+struct {
+	/* Buffers */
+    struct {
+        signed long last;
+        struct {
+            unsigned short data;
+            unsigned char addr;
+            unsigned char flags;
+        } buffer[TRACE_SIZE];
+    } data;
+    unsigned char reset;
 	
-	/* Shadow registers */
-	struct mdev_shadow shadow[NUM_OF_REGS];
-	
-	/* Current trace index */
-	unsigned long index;
-	
-	/* Trace control */
-	volatile char cont_sample;
-	
-	/* Enable the read bypass from the debugger */
-	volatile char bypass_read;
+	/* Registers */
+	struct {
+		unsigned short write;
+		unsigned short read;
+	} regs[NUM_OF_REGS];
+	unsigned char bypass;
 } motiondev_debug;
 
 /* Private debug functions */
@@ -60,41 +51,26 @@ static void trace_init(void)
 {
 	/* Just assure that the index is 0 */
 	/* Don't know exactly how the driver initializes statics */
-	motiondev_debug.index = 0;
+	motiondev_debug.reset = 1;
+	motiondev_debug.bypass = 0u;
 }
 
 /* Trace write */
 static void trace_write(unsigned short addr, unsigned short data, unsigned char flags)
 {
-	struct mdev_trace *loc;
-	
-	/* TODO add single shot mode ?? */
-	/* Only on continous sample or not first sample*/
-	if(motiondev_debug.cont_sample) {
-		/* Get current index */
-		loc = &motiondev_debug.trace[motiondev_debug.index];
-		
-		/* Clear the next flag */
-		loc->flags &= ~(1u << NEXT_FLAG);
-		
-		/* Write a sample */
-		loc->data = data;
-		loc->addr = (unsigned char)(addr & 0xFFu);
-		loc->flags |= (1u << flags);
-
-		/* Loop the counter */
-		if(motiondev_debug.index < DEBUG_TRACE_LENGTH) {
-			motiondev_debug.index++;
-		} else {
-			motiondev_debug.index = 0u;
-		}
-		
-		/* Get next index */
-		loc = &motiondev_debug.trace[motiondev_debug.index];
-		
-		/* Write the next flag */
-		loc->flags |= (1u << NEXT_FLAG);
-	}
+	/* Reset the trace */
+	if(motiondev_debug.reset) {
+        motiondev_debug.data.last = -1;
+        motiondev_debug.reset = 0u;
+    }
+    
+	/* Insert into trace */
+    if(motiondev_debug.data.last < (TRACE_SIZE - 1)) {
+        motiondev_debug.data.last++;
+        motiondev_debug.data.buffer[motiondev_debug.data.last].data = data;
+        motiondev_debug.data.buffer[motiondev_debug.data.last].addr = (unsigned char)addr;
+        motiondev_debug.data.buffer[motiondev_debug.data.last].flags = flags;
+    }
 }
 
 /* Write hook */
@@ -102,7 +78,7 @@ static void debug_write(unsigned short addr, unsigned short data)
 {
 	/* Make a write copy */
 	if(addr < NUM_OF_REGS) {
-		motiondev_debug.shadow[addr].write = data;
+		motiondev_debug.regs[addr].write = data;
 	}
 	
 	/* Write the trace */
@@ -116,10 +92,10 @@ static unsigned short debug_read(unsigned short addr, unsigned short data)
 	
 	/* Overwrite if flag requires it */
 	if(addr < NUM_OF_REGS) {
-		if(motiondev_debug.bypass_read != 0) {
-			val = motiondev_debug.shadow[addr].read;
+		if(motiondev_debug.bypass != 0u) {
+			val = motiondev_debug.regs[addr].read;
 		} else {
-			motiondev_debug.shadow[addr].read = val;
+			motiondev_debug.regs[addr].read = val;
 		}
 	}
 	
@@ -128,24 +104,42 @@ static unsigned short debug_read(unsigned short addr, unsigned short data)
 	
 	return val;
 }
-
 #endif
 
 /* Private data */
-static struct cdev *motiondev_cdev;
+static struct cdev motiondev_cdev;
+static struct class *motiondev_class;
 static dev_t motiondev_major;
 
 /* Private function prototypes */
 static int motiondev_open(struct inode *inode, struct file *file);
 static int motiondev_release(struct inode *inode, struct file *file);
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param);
+static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp);
+static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp);
 
 /* Control structure */
 static struct file_operations file_ops = {
 	.ioctl = motiondev_ioctl,
 	.open = motiondev_open,
-	.release = motiondev_release
+	.release = motiondev_release,
+	.read = motiondev_read,
+	.write = motiondev_write
 };
+
+/* Read data */
+static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp)
+{
+	printk("call to read %d", count);
+	return count;
+}
+
+/* Write data */
+static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp)
+{
+	printk("call to write %d", count);
+	return count;
+}
 
 /* Open file */
 static int motiondev_open(struct inode *inode, struct file *file)
@@ -224,37 +218,47 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 /* Entry point */
 static int __init motiondev_init(void)
 {
-	int ret;
-	dev_t dev_no;
+	int result;
+	int devno;
 	dev_t dev;
+	
+	
+	result = alloc_chrdev_region(&dev, 0, MINOR_DEVICE_NUMBER, DEVICE_FILE_NAME);
+	if(result < 0) {
+		printk(KERN_ERR "error in allocating device.");
+		return -1;
+	}
+	
+	/* Generate number andd init */
+	devno = MKDEV(motiondev_major, MINOR_DEVICE_NUMBER);
+	cdev_init(&motiondev_cdev, &file_ops);
+	motiondev_cdev.owner = THIS_MODULE;
+	motiondev_cdev.ops = &file_ops;
+	
+	/* Add the module */
+	result = cdev_add(&motiondev_cdev, devno, MINOR_DEVICE_NUMBER);
+	if(result) {
+		printk (KERN_NOTICE "couldn't add cdev.");
+	}
 
-	/* Create the device structure */
-	motiondev_cdev = cdev_alloc();
-	motiondev_cdev->ops = &file_ops;
-	motiondev_cdev->owner = THIS_MODULE;
+	/* Create the class */
+	motiondev_class = class_create(THIS_MODULE, DEVICE_FILE_NAME);
+	if(motiondev_class == NULL) {
+		unregister_chrdev_region(dev, 1);
+		return -1;
+	} 
 	
-	printk(KERN_INFO "module init\n");
-	
-	/* Allocate region */
-	ret = alloc_chrdev_region(&dev_no, 0, 1, DEVICE_FILE_NAME);
-	if(ret < 0) {
-		printk(KERN_ERR "major number allocation failed\n");
-		return ret;
+	/* Create the device */
+	if(device_create(motiondev_class, NULL, dev, NULL, DEVICE_FILE_NAME) == NULL) {
+		class_destroy(motiondev_class);
+		unregister_chrdev_region(dev, 1);
+		return -1;
 	}
 	
-	/* Compute the module numbers */
-	motiondev_major = MAJOR(dev_no);
-	dev = MKDEV(motiondev_major, 0);
-	
-	printk(KERN_INFO "the major number for the module is %d\n", motiondev_major);
-	
-	/* Add the device */
-	ret = cdev_add(motiondev_cdev, dev, 1);
-	if(ret < 0) {
-		printk(KERN_ERR "unable to allocate cdev\n");
-		return ret;
-	}
-	
+	/* Print the major number */
+	motiondev_major = MAJOR(dev);
+	printk(KERN_INFO "kernel assigned major number is %d ..\r\n", motiondev_major);
+
 	/* Init the hardware */
 	motiondev_lld_init();
 	
@@ -271,10 +275,20 @@ static int __init motiondev_init(void)
 /* Exit point */
 static void __exit motiondev_exit(void)
 {
-	/* Clean relevant stuff */
-	printk(KERN_INFO "module exit\n");
-	cdev_del(motiondev_cdev);
-	unregister_chrdev_region(motiondev_major, 1);
+	/** A reverse - destroy mechansim -- the way it was created **/
+	printk(KERN_INFO "%s begin cleanup.",  DEVICE_FILE_NAME);
+	
+	/* Delete the character driver */
+	cdev_del(&motiondev_cdev);
+	
+	/* Destroy the device */
+	device_destroy(motiondev_class, MKDEV(motiondev_major, 0));
+	
+	/* Destroy the class */
+	class_destroy(motiondev_class);
+	
+	/* Unregister the driver */
+	unregister_chrdev(motiondev_major, MINOR_DEVICE_NUMBER);
 }
 
 /* Entry and exit functions */

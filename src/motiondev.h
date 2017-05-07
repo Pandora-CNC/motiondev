@@ -1,9 +1,10 @@
 #ifndef _MOTIONDEV_H_
 #define _MOTIONDEV_H_
 
-#define DEVICE_FILE_NAME "motiondev"
+#define MINOR_DEVICE_NUMBER (0)
+#define DEVICE_FILE_NAME "motion"
 
 #define DEBUG_ENABLED 1
-#define DEBUG_TRACE_LENGTH 65536
+#define TRACE_SIZE 65536
 
 #endif
