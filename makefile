@@ -6,7 +6,7 @@ KDIR := /mcuzone/work/w55fa93bsp-2.6.35/linux-2.6.35.4
 
 PWD := $(shell pwd)
 
-MY_CFLAGS += -g -DDEBUG
+MY_CFLAGS +=
 ccflags-y += ${MY_CFLAGS}
 CC += ${MY_CFLAGS}
 

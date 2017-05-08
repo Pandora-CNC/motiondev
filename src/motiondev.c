@@ -8,6 +8,10 @@
 #include "motiondev.h"
 #include "motiondev_lld.h"
 
+/* Placeholder functions */
+static void data_write(unsigned short addr, unsigned short data);
+static unsigned data_read(unsigned short addr);
+
 /* Febug framework */ 
 #if (DEBUG_ENABLED != 0)
 
@@ -18,8 +22,6 @@
 #define WR_FLAG	0x1
 #define RD_FLAG 0x2
 
-static void debug_write(unsigned short addr, unsigned short data);
-static unsigned short debug_read(unsigned short addr, unsigned short data);
 static void trace_write(unsigned short addr, unsigned short data, unsigned char flags);
 static void trace_init(void);
 
@@ -49,9 +51,8 @@ struct {
 /* Init trace */
 static void trace_init(void)
 {
-	/* Just assure that the index is 0 */
-	/* Don't know exactly how the driver initializes statics */
-	motiondev_debug.reset = 1;
+	/* Just assure correct init */
+	motiondev_debug.reset = 1u;
 	motiondev_debug.bypass = 0u;
 }
 
@@ -72,23 +73,36 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
         motiondev_debug.data.buffer[motiondev_debug.data.last].flags = flags;
     }
 }
+#endif
 
-/* Write hook */
-static void debug_write(unsigned short addr, unsigned short data)
+/* Data write */
+static void data_write(unsigned short addr, unsigned short data)
 {
+	/* Write the data */
+	motiondev_lld_write_data(addr, data);
+	
+#if (DEBUG_ENABLED != 0)
+	/* Write the trace */
+	trace_write(addr, data, WR_FLAG);
+
 	/* Make a write copy */
 	if(addr < NUM_OF_REGS) {
 		motiondev_debug.regs[addr].write = data;
 	}
-	
-	/* Write the trace */
-	trace_write(addr, data, WR_FLAG);
+#endif
 }
 
-/* Read hook */
-static unsigned short debug_read(unsigned short addr, unsigned short data)
+/* Data read */
+static unsigned data_read(unsigned short addr)
 {
-	unsigned short val = data;
+	unsigned short val;
+	
+	/* Read data from chip */
+	val = motiondev_lld_read_data(addr);
+	
+#if (DEBUG_ENABLED != 0)	
+	/* Write the trace */
+	trace_write(addr, val, RD_FLAG);
 	
 	/* Overwrite if flag requires it */
 	if(addr < NUM_OF_REGS) {
@@ -98,13 +112,10 @@ static unsigned short debug_read(unsigned short addr, unsigned short data)
 			motiondev_debug.regs[addr].read = val;
 		}
 	}
-	
-	/* Write the trace */
-	trace_write(addr, val, RD_FLAG);
-	
+#endif
+
 	return val;
 }
-#endif
 
 /* Private data */
 static struct cdev motiondev_cdev;
@@ -161,10 +172,13 @@ static int motiondev_release(struct inode *inode, struct file *file)
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	int ret;
-	unsigned short val, addr;
-	
+	int ind;
+
 	/* Temp buffer */
-	unsigned long buf[33];
+	unsigned short buf[512];
+	
+	/* Temp pointer */
+	unsigned short *pbuf;
 	
 	/* Requests */
 	switch(ioctl_num) {
@@ -172,12 +186,8 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 		case 0x4620u:
 			ret = copy_from_user(buf, (unsigned long *)ioctl_param, 8);
 			if(ret == 0) {
-				addr = (unsigned short)(buf[0] & 0xFFFFu);
-				val = (unsigned short)(buf[1] & 0xFFFFu);
-#if (DEBUG_ENABLED != 0)
-				debug_write(addr, val);
-#endif
-				motiondev_lld_write_data(addr, val);	
+				/* Write the data */
+				data_write(buf[0], buf[2]);
 			}
 			break;
 		
@@ -185,29 +195,67 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 		case 0x4621u:
 			ret = copy_from_user(buf, (unsigned long *)ioctl_param, 8);
 			if(ret == 0) {
-				addr = (unsigned short)(buf[0] & 0xFFFFu);
-				val = motiondev_lld_read_data(addr);
-#if (DEBUG_ENABLED != 0)
-				val = debug_read(addr, val);
-#endif
-				buf[1] = (unsigned long)val;
+				/* Just read the data and write the buffer back */
+				buf[2] = data_read(buf[0]);
 				ret = copy_to_user((unsigned long *)ioctl_param, buf, 8);
 			}
 			break;
 			
 		/* Write motion param */	
 		case 0x4622:
-			/* Write from 32 to 47*/
-			
-			/* Write from 64 to 79 */
-			
-			/* Write 48 with 0*/
-			
-			/* Read 18 and if not 1 print error ?? */
-			ret = -1;
+			ret = copy_from_user(buf, (unsigned long *)ioctl_param, 1024);
+			for(ind = 0; ind < 32; ind++) {
+				/* Get the pointer */
+				pbuf = &buf[ind * 16];
+				
+				/* Multiple tries ?? */
+				do {
+					/* Write from 32 to 47*/
+					data_write(32u, pbuf[0]);
+					data_write(33u, pbuf[1]);
+					data_write(34u, pbuf[4]);
+					data_write(35u, pbuf[5]);
+					data_write(36u, pbuf[6]);
+					data_write(37u, pbuf[7]);
+					data_write(38u, pbuf[8]);
+					data_write(39u, pbuf[9]);
+					data_write(40u, pbuf[2]);
+					data_write(41u, pbuf[3]);
+					data_write(42u, pbuf[10]);
+					data_write(43u, pbuf[11]);
+					data_write(44u, pbuf[12]);
+					data_write(45u, pbuf[13]);
+					data_write(46u, pbuf[14]);
+					data_write(47u, pbuf[15]);
+					
+					/* Write from 64 to 79*/
+					data_write(64u, pbuf[0]);
+					data_write(65u, pbuf[1]);
+					data_write(66u, pbuf[4]);
+					data_write(67u, pbuf[5]);
+					data_write(68u, pbuf[6]);
+					data_write(69u, pbuf[7]);
+					data_write(70u, pbuf[8]);
+					data_write(71u, pbuf[9]);
+					data_write(72u, pbuf[2]);
+					data_write(73u, pbuf[3]);
+					data_write(74u, pbuf[10]);
+					data_write(75u, pbuf[11]);
+					data_write(76u, pbuf[12]);
+					data_write(77u, pbuf[13]);
+					data_write(78u, pbuf[14]);
+					data_write(79u, pbuf[15]);
+					
+				} while(data_read(18u)); /* Write check ?? */
+				
+				/* Latch ?? */
+				data_write(48u, 1u);
+				data_write(48u, 0u);
+			}
 			break;
 			
 		default:
+			/* Case 0x4622 not used ?? */
 			ret = -1;
 			break;
 	}
@@ -222,7 +270,7 @@ static int __init motiondev_init(void)
 	int devno;
 	dev_t dev;
 	
-	
+	/* Allocate driver region */
 	result = alloc_chrdev_region(&dev, 0, MINOR_DEVICE_NUMBER, DEVICE_FILE_NAME);
 	if(result < 0) {
 		printk(KERN_ERR "error in allocating device.");
