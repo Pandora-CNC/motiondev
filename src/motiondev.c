@@ -126,18 +126,24 @@ static dev_t motiondev_major;
 static int motiondev_open(struct inode *inode, struct file *file);
 static int motiondev_release(struct inode *inode, struct file *file);
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param);
+
+#if (DEBUG_ENABLED != 0)
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp);
 static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp);
+#endif
 
 /* Control structure */
 static struct file_operations file_ops = {
+#if (DEBUG_ENABLED != 0)	
+	.read = motiondev_read,
+	.write = motiondev_write,
+#endif
 	.ioctl = motiondev_ioctl,
 	.open = motiondev_open,
-	.release = motiondev_release,
-	.read = motiondev_read,
-	.write = motiondev_write
+	.release = motiondev_release
 };
 
+#if (DEBUG_ENABLED != 0)
 /* Read data */
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp)
 {
@@ -239,6 +245,7 @@ static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count
      
 	return sz;
 }
+#endif
 
 /* Open file */
 static int motiondev_open(struct inode *inode, struct file *file)
