@@ -128,6 +128,7 @@ static int motiondev_release(struct inode *inode, struct file *file);
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param);
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp);
 static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp);
+static unsigned long get_hex(unsigned char *str, unsigned char len);
 
 /* Control structure */
 static struct file_operations file_ops = {
@@ -137,6 +138,45 @@ static struct file_operations file_ops = {
 	.read = motiondev_read,
 	.write = motiondev_write
 };
+
+/* Get a integer from hex string of length len */
+static unsigned long get_hex(unsigned char *str, unsigned char len)
+{
+    int i;
+    unsigned long ret;
+    unsigned long sz;
+    unsigned char val;
+    
+    /* clear */
+    ret = 0;
+    
+    if(len < sizeof(unsigned long)) {
+        sz = len;
+    } else {
+        sz = sizeof(unsigned long);
+    }
+    
+    /* Convert to hex */
+    while(sz--) {
+        if((buf[sz] > 47) && (buf[sz] < 58)) { 
+            /* 0 - 9 */
+            val = (unsigned char)'0' + buf[sz];
+        } else if((buf[sz] > 64) && (buf[sz] < 71)) { 
+            /* A - F */
+            val = (unsigned char)'A' + buf[sz];
+        } else if((buf[sz] > 96) && (buf[sz] < 103)) { 
+            /* a - f */
+            val = (unsigned char)'a' + buf[sz];
+        } else {
+            val = 0u;
+        }
+        
+        /* Add to return */
+        ret |= (unsigned long)(val & 0xFFu) << (sz << 3u);
+    }
+    
+    return ret;
+}
 
 /* Read data */
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp)
@@ -148,7 +188,59 @@ static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_
 /* Write data */
 static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp)
 {
+    /* paramter writes */
+    /* write(fp, "r"); - reset trace index */
+    /* write(fp, "b%1x"); - bypass read (0/1) */
+    /* write(fp, "c"); - clear bypass read */
+    /* write(fp, "a%2xv%4x"); - write readback address */
+    
+    unsigned char buf[9]; /* aFFvFFFF + EOL largest char line */
+    int i, count;
+    unsigned short addr, data;
+    
+    /* Write into the buffer */
+    for(i = 0; (i < count) && (i < sizeof(buf)); i++) {
+        get_user(buf[i], buff + i);
+        count = i;
+    }
+    
+    /* find case */
+    switch(buf[0]) {
+        /* Reset trace */
+        case 'r':
+            motiondev_debug.reset = 1u;
+            break;
+        
+        /* Bypass */
+        case 'b':
+            if (count > 1) {
+                if(buf[1] == 1u) {
+                    motiondev_debug.bypass = 1u;
+                } else {
+                    motiondev_debug.bypass = 0u;
+                }
+            }
+            break;
+            
+        /* Address only if format is correct */    
+        case 'a':
+            if((buf[3] == 'v') && (motiondev_debug.bypass != 0u)) {
+                addr = (unsigned short)get_hex(&buf[1], 2);
+                data = (unsigned short)get_hex(&buf[4], 4);
+                
+                /* Overwrite the register */
+                motiondev_debug.regs[addr].read = data;
+            }
+            break;
+        
+        /* Just pass */
+        default:
+            break;    
+    }
+    
+    /* Disable for build, only for debug */
 	printk("call to write %d", count);
+    
 	return count;
 }
 
