@@ -173,6 +173,7 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 {
 	int ret;
 	int ind;
+	unsigned char n;
 
 	/* Temp buffer */
 	unsigned short buf[512];
@@ -210,42 +211,25 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 				
 				/* Multiple tries ?? */
 				do {
-					/* Write from 32 to 47*/
-					data_write(32u, pbuf[0]);
-					data_write(33u, pbuf[1]);
-					data_write(34u, pbuf[4]);
-					data_write(35u, pbuf[5]);
-					data_write(36u, pbuf[6]);
-					data_write(37u, pbuf[7]);
-					data_write(38u, pbuf[8]);
-					data_write(39u, pbuf[9]);
-					data_write(40u, pbuf[2]);
-					data_write(41u, pbuf[3]);
-					data_write(42u, pbuf[10]);
-					data_write(43u, pbuf[11]);
-					data_write(44u, pbuf[12]);
-					data_write(45u, pbuf[13]);
-					data_write(46u, pbuf[14]);
-					data_write(47u, pbuf[15]);
-					
-					/* Write from 64 to 79*/
-					data_write(64u, pbuf[0]);
-					data_write(65u, pbuf[1]);
-					data_write(66u, pbuf[4]);
-					data_write(67u, pbuf[5]);
-					data_write(68u, pbuf[6]);
-					data_write(69u, pbuf[7]);
-					data_write(70u, pbuf[8]);
-					data_write(71u, pbuf[9]);
-					data_write(72u, pbuf[2]);
-					data_write(73u, pbuf[3]);
-					data_write(74u, pbuf[10]);
-					data_write(75u, pbuf[11]);
-					data_write(76u, pbuf[12]);
-					data_write(77u, pbuf[13]);
-					data_write(78u, pbuf[14]);
-					data_write(79u, pbuf[15]);
-					
+					for(n = 32u; n < 65u; n <<= 2) {
+						/* Write from 32 to 47*/
+						data_write(n, pbuf[0]);
+						data_write(n + 1u, pbuf[1]);
+						data_write(n + 2u, pbuf[4]);
+						data_write(n + 3u, pbuf[5]);
+						data_write(n + 4u, pbuf[6]);
+						data_write(n + 5u, pbuf[7]);
+						data_write(n + 6u, pbuf[8]);
+						data_write(n + 7u, pbuf[9]);
+						data_write(n + 8u, pbuf[2]);
+						data_write(n + 9u, pbuf[3]);
+						data_write(n + 10u, pbuf[10]);
+						data_write(n + 11u, pbuf[11]);
+						data_write(n + 12u, pbuf[12]);
+						data_write(n + 13u, pbuf[13]);
+						data_write(n + 14u, pbuf[14]);
+						data_write(n + 15u, pbuf[15]);
+					    }
 				} while(data_read(18u)); /* Write check ?? */
 				
 				/* Latch ?? */
