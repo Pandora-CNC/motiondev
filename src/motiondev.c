@@ -308,14 +308,14 @@ static int __init motiondev_init(void)
 /* Exit point */
 static void __exit motiondev_exit(void)
 {
-	/** A reverse - destroy mechansim -- the way it was created **/
+	/* Clean all*/
 	printk(KERN_INFO "%s begin cleanup.",  DEVICE_FILE_NAME);
 	
 	/* Delete the character driver */
 	cdev_del(&motiondev_cdev);
 	
 	/* Destroy the device */
-	device_destroy(motiondev_class, MKDEV(motiondev_major, 0));
+	device_destroy(motiondev_class, MKDEV(motiondev_major, MINOR_DEVICE_NUMBER));
 	
 	/* Destroy the class */
 	class_destroy(motiondev_class);
