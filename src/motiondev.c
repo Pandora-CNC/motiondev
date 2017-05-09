@@ -252,52 +252,53 @@ static int __init motiondev_init(void)
 {
 	int result;
 	int devno;
-	dev_t dev;
+	dev_t dev_no;
 	
 	/* Allocate driver region */
-	result = alloc_chrdev_region(&dev, 0, MINOR_DEVICE_NUMBER, DEVICE_FILE_NAME);
+	result = alloc_chrdev_region(&dev_no, 0, MINOR_DEVICE_NUMBER, DEVICE_FILE_NAME);
 	if(result < 0) {
 		printk(KERN_ERR "error in allocating device.");
 		return -1;
 	}
 	
-	/* Generate number andd init */
-	devno = MKDEV(motiondev_major, MINOR_DEVICE_NUMBER);
+    /* Write the major number */
+    motiondev_major = MAJOR(dev_no);
+    dev_no = MKDEV(motiondev_major, MINOR_DEVICE_NUMBER)
+    
+	/* Init */
 	cdev_init(&motiondev_cdev, &file_ops);
-	motiondev_cdev.owner = THIS_MODULE;
-	motiondev_cdev.ops = &file_ops;
 	
 	/* Add the module */
 	result = cdev_add(&motiondev_cdev, devno, MINOR_DEVICE_NUMBER);
 	if(result) {
 		printk (KERN_NOTICE "couldn't add cdev.");
+        return -1;
 	}
 
 	/* Create the class */
-	motiondev_class = class_create(THIS_MODULE, DEVICE_FILE_NAME);
+	motiondev_class = class_create(THIS_MODULE, "chardrv");
 	if(motiondev_class == NULL) {
 		unregister_chrdev_region(dev, 1);
 		return -1;
 	} 
 	
 	/* Create the device */
-	if(device_create(motiondev_class, NULL, dev, NULL, DEVICE_FILE_NAME) == NULL) {
+	if(device_create(motiondev_class, NULL, motiondev_cdev, NULL, DEVICE_FILE_NAME) == NULL) {
 		class_destroy(motiondev_class);
 		unregister_chrdev_region(dev, 1);
 		return -1;
 	}
 	
 	/* Print the major number */
-	motiondev_major = MAJOR(dev);
 	printk(KERN_INFO "kernel assigned major number is %d ..\r\n", motiondev_major);
 
-	/* Init the hardware */
-	motiondev_lld_init();
-	
 #if (DEBUG_ENABLED != 0)
 	/* Just to be sure */
 	trace_init();
 #endif	
+
+	/* Init the hardware */
+	motiondev_lld_init();
 	
 	/* Ok */
 	printk(KERN_INFO "%s initialization finished\n", DEVICE_FILE_NAME);
