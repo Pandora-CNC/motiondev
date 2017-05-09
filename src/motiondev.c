@@ -29,7 +29,7 @@ static void trace_init(void);
 struct {
 	/* Buffers */
     struct {
-        signed long last;
+        unsigned long last;
         struct {
             unsigned short data;
             unsigned char addr;
@@ -61,16 +61,16 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
 {
 	/* Reset the trace */
 	if(motiondev_debug.reset) {
-        motiondev_debug.data.last = -1;
+        motiondev_debug.data.last = 0u;
         motiondev_debug.reset = 0u;
     }
     
 	/* Insert into trace */
-    if(motiondev_debug.data.last < (TRACE_SIZE - 1)) {
-        motiondev_debug.data.last++;
+    if(motiondev_debug.data.last < TRACE_SIZE) {
         motiondev_debug.data.buffer[motiondev_debug.data.last].data = data;
         motiondev_debug.data.buffer[motiondev_debug.data.last].addr = (unsigned char)addr;
         motiondev_debug.data.buffer[motiondev_debug.data.last].flags = flags;
+	motiondev_debug.data.last++;
     }
 }
 #endif
@@ -128,7 +128,6 @@ static int motiondev_release(struct inode *inode, struct file *file);
 static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int ioctl_num, unsigned long ioctl_param);
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp);
 static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count, loff_t *offp);
-static unsigned long get_hex(unsigned char *str, unsigned char len);
 
 /* Control structure */
 static struct file_operations file_ops = {
@@ -139,50 +138,30 @@ static struct file_operations file_ops = {
 	.write = motiondev_write
 };
 
-/* Get a integer from hex string of length len */
-static unsigned long get_hex(unsigned char *str, unsigned char len)
-{
-    int i;
-    unsigned long ret;
-    unsigned long sz;
-    unsigned char val;
-    
-    /* clear */
-    ret = 0;
-    
-    if(len < sizeof(unsigned long)) {
-        sz = len;
-    } else {
-        sz = sizeof(unsigned long);
-    }
-    
-    /* Convert to hex */
-    while(sz--) {
-        if((buf[sz] > 47) && (buf[sz] < 58)) { 
-            /* 0 - 9 */
-            val = (unsigned char)'0' + buf[sz];
-        } else if((buf[sz] > 64) && (buf[sz] < 71)) { 
-            /* A - F */
-            val = (unsigned char)'A' + buf[sz];
-        } else if((buf[sz] > 96) && (buf[sz] < 103)) { 
-            /* a - f */
-            val = (unsigned char)'a' + buf[sz];
-        } else {
-            val = 0u;
-        }
-        
-        /* Add to return */
-        ret |= (unsigned long)(val & 0xFFu) << (sz << 3u);
-    }
-    
-    return ret;
-}
-
 /* Read data */
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp)
 {
-	printk("call to read %d", count);
-	return count;
+    /* Return format */
+    /* DDAF (DD=data, A=addr, F=flags) */
+    
+    unsigned long max;
+    unsigned long sz;
+    unsigned long start;
+    
+    /* Get total buffer size in bytes */
+    sz = (sizeof(struct s_buffer) * motiondev_debug.last) - *offp;
+    
+    /* calculate total number of bytes to copy */
+    max = ((count < sz) ? count : sz) & ~0x3u;
+    
+    /* copy data */
+    if(copy_to_user(buff, motiondev.data.buffer[(*offp) >> 2u], max) != 0u) {
+        printk(KERN_ERR "could not write to buffer");
+        return -1;
+    }
+    
+	printk("call to read, copied %d bytes", max);
+	return max;
 }
 
 /* Write data */
@@ -190,58 +169,75 @@ static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count
 {
     /* paramter writes */
     /* write(fp, "r"); - reset trace index */
-    /* write(fp, "b%1x"); - bypass read (0/1) */
-    /* write(fp, "c"); - clear bypass read */
-    /* write(fp, "a%2xv%4x"); - write readback address */
+    /* write(fp, "bV"); - bypass read (V=0/1) */
+    /* write(fp, "aADD); - write readback address (A=addr, DD=data) */
     
-    unsigned char buf[9]; /* aFFvFFFF + EOL largest char line */
-    int i, count;
+    unsigned char buf[5]; /* aFFvFFFF + EOL largest char line */
+    int i, sz;
     unsigned short addr, data;
     
+    /* Decide size */
+    sz = (count < sizeof(buf)) ? count : sizeof(buf);
+    
     /* Write into the buffer */
-    for(i = 0; (i < count) && (i < sizeof(buf)); i++) {
-        get_user(buf[i], buff + i);
-        count = i;
+    if(copy_from_user(buf, buff, sz) != 0u) {
+        printk(KERN_ERR "could not read to buffer");
+        return -1;
     }
     
     /* find case */
     switch(buf[0]) {
         /* Reset trace */
-        case 'r':
+        case (unsigned char)'r':
             motiondev_debug.reset = 1u;
+            printk(KERN_INFO "reset activated");
             break;
         
         /* Bypass */
-        case 'b':
-            if (count > 1) {
-                if(buf[1] == 1u) {
+        case (unsigned char)'b':
+            if (sz > 1) {
+                if(buf[1] != 0u) {
                     motiondev_debug.bypass = 1u;
+                    printk(KERN_INFO "read bypass enabled");
                 } else {
                     motiondev_debug.bypass = 0u;
+                    printk(KERN_INFO "read bypass disabled");
                 }
+            } else {
+                printk(KERN_WARN "invalid bypass format");
             }
             break;
             
         /* Address only if format is correct */    
-        case 'a':
-            if((buf[3] == 'v') && (motiondev_debug.bypass != 0u)) {
-                addr = (unsigned short)get_hex(&buf[1], 2);
-                data = (unsigned short)get_hex(&buf[4], 4);
-                
-                /* Overwrite the register */
-                motiondev_debug.regs[addr].read = data;
+        case (unsigned char)'a':
+            if(sz > 3) {
+                if(motiondev_debug.bypass != 0u) {
+                    addr = (unsigned short)buf[1] & 0xFF;
+                    
+                    /* Check for correct range */
+                    if(addr < NUM_OF_REGS) {
+                        /* And write */
+                        data = (unsigned short)buf[2] << 8u | (unsigned short)buf[3];
+                        motiondev_debug.regs[addr].read = data;
+                        printk(KERN_INFO "bypass read at address %x with value %x", addr, data);
+                    } else {
+                        printk(KERN_WARN "address parameter out of range %x", addr);
+                    }
+                } else {
+                    printk(KERN_WARN "bypass not enabled");
+                }
+            } else {
+                printk(KERN_WARN "invalid address format");
             }
             break;
         
         /* Just pass */
         default:
+            printk(KERN_WARN "no valid parameters");
             break;    
     }
-    
-    /* Disable for build, only for debug */
-	printk("call to write %d", count);
-    
-	return count;
+     
+	return sz;
 }
 
 /* Open file */
