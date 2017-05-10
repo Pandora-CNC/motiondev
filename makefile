@@ -15,7 +15,9 @@ motiondev-objs := /src/motiondev.o /src/motiondev_lld.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
-	EXTRA_CFLAGS="$(MY_CFLAGS)"
+	$(CROSS_COMPILE)gcc -Wall --static -O2 -marm -march=armv5 src/control.c -o out/control
+	cp -f motiondev.ko out/motiondev.ko
+	
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
