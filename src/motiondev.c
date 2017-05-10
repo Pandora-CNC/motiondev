@@ -3,7 +3,9 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/jiffies.h>
 #include <asm/uaccess.h>
+#include <asm/param.h>	
 
 #include "motiondev.h"
 #include "motiondev_lld.h"
@@ -24,7 +26,9 @@ struct {
     struct {
         unsigned long last;
 		unsigned long cursor;
+		unsigned long msstart;
         struct s_buffer {
+			unsigned long msecs;
             unsigned short data;
             unsigned char addr;
 			unsigned char flags;
@@ -68,6 +72,7 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
 			motiondev_debug.data.cursor = 0u;
 			motiondev_debug.data.last = 0u;
 			motiondev_debug.reset = 0u;
+			motiondev_debug.data.msstart = jiffies_to_msecs(jiffies);
 		}
 		
 		/* Insert into trace only if address is correct and we have space */
@@ -78,6 +83,7 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
 				motiondev_debug.data.buffer[motiondev_debug.data.last].data = data;
 				motiondev_debug.data.buffer[motiondev_debug.data.last].addr = (unsigned char)addr;
 				motiondev_debug.data.buffer[motiondev_debug.data.last].flags = flags;
+				motiondev_debug.data.buffer[motiondev_debug.data.last].msecs = jiffies_to_msecs(jiffies) - motiondev_debug.data.msstart;
 				motiondev_debug.data.last++;
 			}
 		}
@@ -153,8 +159,8 @@ static struct file_operations file_ops = {
 /* Read data */
 static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_t *offp)
 {
-    /* Return format [FADD] Flags, Address, Data */
-	unsigned char buf[4];
+    /* Return format [FADDTTTT] Flags, Address, Data, Time */
+	unsigned char buf[8];
 	int max;
 	int sz;
 	int ind;
@@ -164,11 +170,17 @@ static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_
 	
 	
 	for(ind = 0; ind < sz; ind++) {
-		/* Create buffer */
+		/* Copy data */
 		buf[0] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].flags;
 		buf[1] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].addr;
 		buf[2] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].data >> 8u) & 0xFFu;
 		buf[3] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].data & 0xFFu;
+		
+		/* Copy time */
+		buf[4] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 24u) & 0xFFu;
+		buf[5] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 16u) & 0xFFu;
+		buf[6] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 8u) & 0xFFu;
+		buf[7] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs & 0xFFu;
 		
 		/* Copy buffer */
 		if(copy_to_user(&buff[ind * sizeof(buf)], buf, sizeof(buf)) != 0) {

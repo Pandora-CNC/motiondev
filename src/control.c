@@ -19,6 +19,8 @@ int main(int argc, char *argv[])
 		unsigned int data;
 	} req_data;
 	
+	unsigned int msecs;
+	
 	unsigned int flag, addr, data, len;
 
 	/* open file */
@@ -113,11 +115,19 @@ int main(int argc, char *argv[])
 					flag = buf[0] & (TRACE_WR_FLAG | TRACE_RD_FLAG);
 					addr = buf[1] & 0xFFu;
 					data = (((unsigned int)buf[2] & 0xFFu) << 8) | (buf[3] & 0xFFu);
-
+					
+					msecs = buf[4];
+					msecs <<= 8u;
+					msecs |= buf[5];
+					msecs <<= 8u; 
+					msecs |= buf[6];
+					msecs <<= 8u; 
+					msecs |= buf[7]; 
+					
 					if(flag & TRACE_WR_FLAG) {
-						printf("WR(%03d, %04x)\n", addr, data);
+						printf("WR(%03d, %04x) +%08dms\n", addr, data, msecs);
 					} else if (flag & TRACE_RD_FLAG) {
-						printf("RD(%03d, %04x)\n", addr, data);
+						printf("RD(%03d, %04x) +%08dms\n", addr, data, msecs);
 					} else {
 						printf("Unknown flag!\n");
 					}
