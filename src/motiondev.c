@@ -362,6 +362,11 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 			if(ret == 0) {
 				/* Just read the data and write the buffer back */
 				buf[2] = data_read(buf[0]);
+				
+				/* Clear others */
+				buf[1] = 0u;
+				buf[3] = 0u;
+				
 				ret = copy_to_user((unsigned long *)ioctl_param, buf, 8);
 			}
 			break;
@@ -375,8 +380,8 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 				
 				/* Multiple tries ?? */
 				do {
-					for(n = 32u; n < 65u; n <<= 2) {
-						/* Write from 32 to 47*/
+					for(n = 32u; n < 65u; n += 32u) {
+						/* Write from 32/64 to 47/79 */
 						data_write(n, pbuf[0]);
 						data_write(n + 1u, pbuf[1]);
 						data_write(n + 2u, pbuf[4]);
@@ -393,8 +398,11 @@ static int motiondev_ioctl(struct inode *inode, struct file *file, unsigned int 
 						data_write(n + 13u, pbuf[13]);
 						data_write(n + 14u, pbuf[14]);
 						data_write(n + 15u, pbuf[15]);
-					    }
-				} while(data_read(18u)); /* Write check ?? */
+					}
+					
+					/* Latch ?? */
+					data_write(48u, 0u); 
+				} while(data_read(18u) == 0u); /* Write check ?? */
 				
 				/* Latch ?? */
 				data_write(48u, 1u);
