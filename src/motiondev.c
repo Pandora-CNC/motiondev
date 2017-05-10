@@ -28,13 +28,14 @@ struct {
 		unsigned long cursor;
 		unsigned long msstart;
         struct s_buffer {
+#if (TIMESTAMP_ENABLED != 0)
 			unsigned long msecs;
+#endif			
             unsigned short data;
             unsigned char addr;
 			unsigned char flags;
         } buffer[TRACE_SIZE];
     } data;
-    unsigned char reset;
 	unsigned char enable;
 	
 	/* Registers */
@@ -52,8 +53,9 @@ static void trace_init(void)
 	int ind;
 	
 	/* Just assure correct init */
-	motiondev_debug.reset = 1u;
 	motiondev_debug.enable = 1u;
+	motiondev_debug.data.cursor = 0u;
+	motiondev_debug.data.last = 0u;
 	
 	/* Clear bypass flags */
 	for(ind = 0u; ind < NUM_OF_REGS; ind++) {
@@ -67,14 +69,6 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
 {
 	/* Only if enabled */
 	if(motiondev_debug.enable) {
-		/* Reset the trace */
-		if(motiondev_debug.reset) {
-			motiondev_debug.data.cursor = 0u;
-			motiondev_debug.data.last = 0u;
-			motiondev_debug.reset = 0u;
-			motiondev_debug.data.msstart = jiffies_to_msecs(jiffies);
-		}
-		
 		/* Insert into trace only if address is correct and we have space */
 		if((addr < NUM_OF_REGS) && (motiondev_debug.data.last < TRACE_SIZE)) {
 			/* And the address is not excluded */
@@ -83,7 +77,9 @@ static void trace_write(unsigned short addr, unsigned short data, unsigned char 
 				motiondev_debug.data.buffer[motiondev_debug.data.last].data = data;
 				motiondev_debug.data.buffer[motiondev_debug.data.last].addr = (unsigned char)addr;
 				motiondev_debug.data.buffer[motiondev_debug.data.last].flags = flags;
+#if (TIMESTAMP_ENABLED != 0)
 				motiondev_debug.data.buffer[motiondev_debug.data.last].msecs = jiffies_to_msecs(jiffies) - motiondev_debug.data.msstart;
+#endif
 				motiondev_debug.data.last++;
 			}
 		}
@@ -177,10 +173,12 @@ static ssize_t motiondev_read(struct file *filp, char *buff, size_t count, loff_
 		buf[3] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].data & 0xFFu;
 		
 		/* Copy time */
+#if (TIMESTAMP_ENABLED != 0)
 		buf[4] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 24u) & 0xFFu;
 		buf[5] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 16u) & 0xFFu;
 		buf[6] = (motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs >> 8u) & 0xFFu;
 		buf[7] = motiondev_debug.data.buffer[motiondev_debug.data.cursor].msecs & 0xFFu;
+#endif
 		
 		/* Copy buffer */
 		if(copy_to_user(&buff[ind * sizeof(buf)], buf, sizeof(buf)) != 0) {
@@ -229,8 +227,12 @@ static ssize_t motiondev_write(struct file *filp, const char *buff, size_t count
 		
         /* Reset trace */
         case OP_RESET_TRACE: /* format [O] Op */
-            motiondev_debug.reset = 1u;
-            printk(KERN_INFO "reset activated\n");
+			motiondev_debug.data.cursor = 0u;
+			motiondev_debug.data.last = 0u;
+#if (TIMESTAMP_ENABLED != 0)
+			motiondev_debug.data.msstart = jiffies_to_msecs(jiffies);
+#endif
+            printk(KERN_INFO "trace resetted\n");
             break;
         
         /* Bypass set */

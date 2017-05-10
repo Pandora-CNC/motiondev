@@ -8,6 +8,7 @@
 /* Debug control */
 #define DEBUG_ENABLED 1
 #define TRACE_SIZE 250000
+#define TIMESTAMP_ENABLED 0
 
 /* Max write/read index (+ 1) */
 #define NUM_OF_REGS 167

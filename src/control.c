@@ -18,8 +18,10 @@ int main(int argc, char *argv[])
 		unsigned int address;
 		unsigned int data;
 	} req_data;
-	
+
+#if (TIMESTAMP_ENABLED != 0)	
 	unsigned int msecs;
+#endif	
 	
 	unsigned int flag, addr, data, len;
 
@@ -115,7 +117,8 @@ int main(int argc, char *argv[])
 					flag = buf[0] & (TRACE_WR_FLAG | TRACE_RD_FLAG);
 					addr = buf[1] & 0xFFu;
 					data = (((unsigned int)buf[2] & 0xFFu) << 8) | (buf[3] & 0xFFu);
-					
+
+#if (TIMESTAMP_ENABLED != 0)	
 					msecs = buf[4];
 					msecs <<= 8u;
 					msecs |= buf[5];
@@ -131,6 +134,15 @@ int main(int argc, char *argv[])
 					} else {
 						printf("Unknown flag!\n");
 					}
+#else
+					if(flag & TRACE_WR_FLAG) {
+						printf("WR(%03d, %04x)\n", addr, data);
+					} else if (flag & TRACE_RD_FLAG) {
+						printf("RD(%03d, %04x)\n", addr, data);
+					} else {
+						printf("Unknown flag!\n");
+					}
+#endif					
 				};
 				break;
 				
