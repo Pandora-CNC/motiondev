@@ -1,9 +1,9 @@
 #Added trace and reverse engineering functionalities for the motiondev driver
 
-* trace size can be controlled from TRACE_SIZE (250000 at the moment)
-* number of allowed registers NUM_OF_REGS (167 at the moment)
+trace size can be controlled from TRACE_SIZE (250000 at the moment)
+number of allowed registers NUM_OF_REGS (167 at the moment)
 
-* usage example
+# usage example
 
 or wherever you have the usb stick mounted
 * cd udisk-sda1 
@@ -72,10 +72,10 @@ allow
 *./control pw144_3
 *./control pr64_1
 
-
 get unread log data
 prints unread log events. also cleares the ones read
 * ./control g
+* ./control g > abc.xxx
 
 read data
 Rx where x = addr(dec)
@@ -88,4 +88,11 @@ Wx_y where x = addr(dec), y = data(hex)
 writes and prints data at address 0 (also appears in trace). 
 Use the original driver for untainted operations
 * ./control W0_a1
+
+The only thing needed now is to start the application and make traces.
+For example:
+* ./control r
+* ./../mnd/nand1-1/motion.elf (exit with CTRL+C)
+* ./control g >dump.txt
+
 
